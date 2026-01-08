@@ -173,6 +173,8 @@ public class LegacyScreenshotStarter : MonoBehaviour
 }
 ```
 
+> ⚠️ **已知缺陷（legacy + 运行时授权）**：在部分机型/系统版本上，即使用户已授予媒体权限，legacy 策略也可能需要**下次启动 App**后才生效。
+
    **代码示例（新建或修改：`Assets/Plugins/Android/AndroidManifest.xml`）**：
 
 ```xml

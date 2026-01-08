@@ -173,6 +173,8 @@ public class LegacyScreenshotStarter : MonoBehaviour
 }
 ```
 
+> ⚠️ **Known limitation (legacy + runtime permission)**: On some devices/OS versions, even after the user grants the media permission, the legacy strategy may only take effect after the **next app launch**.
+
    **Code example (create or edit: `Assets/Plugins/Android/AndroidManifest.xml`)**:
 
 ```xml
