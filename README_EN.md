@@ -85,10 +85,20 @@ Start screenshot behavior monitoring.
 - `gameObjectName`: Name of the GameObject that receives screenshot callbacks
 - `methodName`: Name of the method that receives screenshot callbacks
 - `useDetectScreenCapture`: Whether to use Android 14+ ScreenCaptureCallback strategy (true = more accurate but no file path; false = legacy strategy, may get file path but not 100% accurate)
+  - `true`: On Android 14+, uses DETECT strategy (more accurate, but no real screenshot path; callback payload is `"screenshot_detected"`)
+  - `false`: Uses legacy strategy (tries to resolve real path, but not 100% accurate)
 
 ### StopListenScreenShot()
 
 Stop screenshot behavior monitoring.
+
+### HasLegacyMediaPermissionGranted()
+
+Checks whether the media permission required by the legacy strategy is granted (Android only). This only checks runtime authorization status; it does not verify whether the permission is declared in the manifest.
+
+### RequestLegacyMediaPermission()
+
+Requests the media permission required by the legacy strategy (Android only). This only triggers the permission request and does not start listening automatically. After the user grants permission, call `StartListenScreenShot(..., false)` to start legacy listening.
 
 ## Platform Implementation Details
 
@@ -136,8 +146,32 @@ Stop screenshot behavior monitoring.
 | Android 14+ DETECT strategy | true | `DETECT_SCREEN_CAPTURE` declared | Not granted / ROM restricted | Silent return, listener not started |
 | Android 14+ DETECT strategy | true | `DETECT_SCREEN_CAPTURE` declared | Granted | Listener started; callback payload is `"screenshot_detected"` |
 | Legacy strategy (any Android) | false (or Android < 14) | No `READ_MEDIA_IMAGES/READ_EXTERNAL_STORAGE` declared | - | Silent return, listener not started |
-| Legacy strategy (any Android) | false (or Android < 14) | Media permission declared | Not granted | Silent return, listener not started |
+| Legacy strategy (any Android) | false (or Android < 14) | Media permission declared | Not granted | Silent return, listener not started (you may call `RequestLegacyMediaPermission()` to request it) |
 | Legacy strategy (any Android) | false (or Android < 14) | Media permission declared | Granted | Listener started; tries to return real file path (may not callback if path cannot be resolved) |
+
+   **Recommended flow (legacy strategy + permission)**:
+
+```csharp
+using Unicorn.Herman.ScreenShotObserver;
+using UnityEngine;
+
+public class LegacyScreenshotStarter : MonoBehaviour
+{
+    public void StartLegacyListener()
+    {
+        // 1) Check permission first (legacy requires media permission)
+        if (!ScreenShotObserver.Instance.HasLegacyMediaPermissionGranted())
+        {
+            // 2) Request permission (after user grants it, call StartLegacyListener again)
+            ScreenShotObserver.Instance.RequestLegacyMediaPermission();
+            return;
+        }
+
+        // 3) Granted: start with legacy strategy (useDetectScreenCapture=false)
+        ScreenShotObserver.Instance.StartListenScreenShot("NativeMsgRx", "OnScreenshotDetected", false);
+    }
+}
+```
 
    **Code example (create or edit: `Assets/Plugins/Android/AndroidManifest.xml`)**:
 

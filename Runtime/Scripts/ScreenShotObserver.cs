@@ -1,6 +1,9 @@
 using System;
 using System.Runtime.InteropServices;
 using UnityEngine;
+#if UNITY_ANDROID && !UNITY_EDITOR
+using UnityEngine.Android;
+#endif
 
 namespace Unicorn.Herman.ScreenShotObserver
 {
@@ -95,5 +98,58 @@ public class ScreenShotObserver
         Debug.LogWarning("[ScreenShotObserver] StopListenScreenShot not supported on this platform");
 #endif
     }
+
+    /// <summary>
+    /// 检查 legacy 策略所需的媒体权限是否已授权（仅 Android 有效）。
+    /// 注意：该方法只检查“是否已授权”，不会检查你是否已在 Manifest 声明权限。
+    /// </summary>
+    public bool HasLegacyMediaPermissionGranted() {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        int sdk = GetAndroidSdkInt();
+        if (sdk >= 33) {
+            return Permission.HasUserAuthorizedPermission("android.permission.READ_MEDIA_IMAGES");
+        }
+        if (sdk >= 23) {
+            return Permission.HasUserAuthorizedPermission("android.permission.READ_EXTERNAL_STORAGE");
+        }
+        // Android 5.x 及以下无运行时权限
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    /// <summary>
+    /// 请求 legacy 策略所需的媒体权限（仅 Android 有效，且不会自动开始监听）。
+    /// - Android 13+ 请求 READ_MEDIA_IMAGES
+    /// - Android 6-12 请求 READ_EXTERNAL_STORAGE
+    /// </summary>
+    public void RequestLegacyMediaPermission() {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        int sdk = GetAndroidSdkInt();
+        if (sdk >= 33) {
+            Permission.RequestUserPermission("android.permission.READ_MEDIA_IMAGES");
+            return;
+        }
+        if (sdk >= 23) {
+            Permission.RequestUserPermission("android.permission.READ_EXTERNAL_STORAGE");
+            return;
+        }
+        // Android 5.x 及以下无运行时权限
+#endif
+    }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private int GetAndroidSdkInt() {
+        try {
+            using (var version = new AndroidJavaClass("android.os.Build$VERSION")) {
+                return version.GetStatic<int>("SDK_INT");
+            }
+        }
+        catch {
+            return 0;
+        }
+    }
+#endif
 }
 }

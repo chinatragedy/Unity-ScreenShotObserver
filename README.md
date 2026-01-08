@@ -84,10 +84,21 @@ public class ScreenshotReceiver : MonoBehaviour
 **参数：**
 - `gameObjectName`：接收截屏回调的 GameObject 名称（默认：`"NativeMsgRx"`）
 - `methodName`：接收截屏回调的方法名称（默认：`"OnScreenshotDetected"`）
+- `useDetectScreenCapture`：
+  - `true`：Android 14+ 使用 DETECT 策略（更准确，但无法获取真实截图路径，回调 `"screenshot_detected"`）
+  - `false`：使用 legacy 策略（尽力获取真实路径，但无法 100% 准确）
 
 ### StopListenScreenShot()
 
 停止截屏行为监听。
+
+### HasLegacyMediaPermissionGranted()
+
+检查 legacy 策略所需的媒体权限是否已授权（仅 Android 有效）。该方法只检查**运行时授权**状态，不会检查 Manifest 是否声明。
+
+### RequestLegacyMediaPermission()
+
+请求 legacy 策略所需的媒体权限（仅 Android 有效）。该方法**只发起权限请求**，不会自动启动监听，需要在用户授权后再调用 `StartListenScreenShot(..., false)`。
 
 ## 平台实现细节
 
@@ -135,8 +146,32 @@ public class ScreenshotReceiver : MonoBehaviour
 | Android 14+ DETECT 策略 | true | 已声明 `DETECT_SCREEN_CAPTURE` | 未授予/ROM 限制 | 静默返回，不启动监听 |
 | Android 14+ DETECT 策略 | true | 已声明 `DETECT_SCREEN_CAPTURE` | 已授予 | 启动监听；回调参数为 `"screenshot_detected"` |
 | legacy 策略（Android 任意版本） | false（或 Android < 14） | 未声明 `READ_MEDIA_IMAGES/READ_EXTERNAL_STORAGE` | - | 静默返回，不启动监听 |
-| legacy 策略（Android 任意版本） | false（或 Android < 14） | 已声明媒体权限 | 未授权 | 静默返回，不启动监听 |
+| legacy 策略（Android 任意版本） | false（或 Android < 14） | 已声明媒体权限 | 未授权 | 静默返回，不启动监听（可使用 `RequestLegacyMediaPermission()` 主动申请） |
 | legacy 策略（Android 任意版本） | false（或 Android < 14） | 已声明媒体权限 | 已授权 | 启动监听；尽力回传真实路径（取不到则可能不回调） |
+
+   **推荐流程（legacy 策略 + 权限）**：
+
+```csharp
+using Unicorn.Herman.ScreenShotObserver;
+using UnityEngine;
+
+public class LegacyScreenshotStarter : MonoBehaviour
+{
+    public void StartLegacyListener()
+    {
+        // 1) 先检查权限（legacy 需要媒体权限）
+        if (!ScreenShotObserver.Instance.HasLegacyMediaPermissionGranted())
+        {
+            // 2) 未授权则主动请求（注意：请求后需要等用户授权，再次调用 StartLegacyListener）
+            ScreenShotObserver.Instance.RequestLegacyMediaPermission();
+            return;
+        }
+
+        // 3) 已授权：用 legacy 策略启动（useDetectScreenCapture=false）
+        ScreenShotObserver.Instance.StartListenScreenShot("NativeMsgRx", "OnScreenshotDetected", false);
+    }
+}
+```
 
    **代码示例（新建或修改：`Assets/Plugins/Android/AndroidManifest.xml`）**：
 

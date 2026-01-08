@@ -30,6 +30,7 @@ import java.util.Set;
 public class ScreenshotLifecycleObserver {
     private static final String TAG = "@ScreenshotObserver";
     private static final String SCREENSHOT_DETECTED = "screenshot_detected";
+    private static final String PERM_DETECT_SCREEN_CAPTURE = "android.permission.DETECT_SCREEN_CAPTURE";
 
     // 监听状态
     private static boolean isListening = false;
@@ -37,13 +38,6 @@ public class ScreenshotLifecycleObserver {
     // Unity 通信相关
     private static String unityGoName;
     private static String unityMethodName;
-
-    /**
-     * 当前监听是否使用 Android 14+ 的 ScreenCaptureCallback 策略
-     * - true: Android 14+ 使用 registerScreenCaptureCallback()，优点是准确，缺点是无法获取截图路径
-     * - false: 即使 Android 14+ 也使用 legacy MediaStore(ContentObserver) 策略，优点是能拿到路径，缺点是无法 100% 准确
-     */
-    private static boolean usingAndroid14CallbackStrategy = false;
 
     // Android 14+ 专用变量
     private static Application.ActivityLifecycleCallbacks lifecycleCallbacks;
@@ -89,43 +83,27 @@ public class ScreenshotLifecycleObserver {
         unityMethodName = methodName;
 
         Activity currentActivity = UnityPlayer.currentActivity;
-        if (currentActivity == null) {
-            isListening = false;
-            return;
-        }
+        if (currentActivity == null) return;
 
         // 选择策略：
         // - Android 14+ 且 useDetectScreenCapture=true：优先尝试新策略（准确，但无路径）
         // - 其他情况：使用 legacy 策略（可能拿到路径，但判定不 100%）
         boolean shouldUseAndroid14Callback = Build.VERSION.SDK_INT >= 34 && useDetectScreenCapture;
 
-        // 现在权限由接入方手动在项目 Manifest 中声明，因此需要考虑：
-        // - 没声明权限（最终 Manifest 不包含该 permission）
-        // - 声明了但没授权（仅媒体权限属于运行时授权）
-        //
-        // 对于 DETECT_SCREEN_CAPTURE：不是运行时权限，无法 requestPermissions() 申请；
-        // 且部分设备/ROM 可能不会授予三方应用，调用 registerScreenCaptureCallback 会抛 SecurityException。
-        if (shouldUseAndroid14Callback) {
-            String detectPerm = "android.permission.DETECT_SCREEN_CAPTURE";
-            if (!isPermissionDeclared(currentActivity, detectPerm)) {
-                // 未声明权限：静默不执行任何逻辑
-                return;
-            } else if (!hasPermissionGranted(currentActivity, detectPerm)) {
-                // 未授予权限：静默不执行任何逻辑
-                return;
-            }
-        }
+        // 权限声明（Manifest）只读取一次，避免重复 PackageInfo 查询
+        final String[] declaredPerms = getDeclaredPermissions(currentActivity);
 
-        // legacy 策略需要媒体读取权限（用于访问 MediaStore 获取截图路径）
-        if (!shouldUseAndroid14Callback) {
-            // 未声明媒体权限：静默不执行任何逻辑
-            if (!isAnyMediaPermissionDeclared(currentActivity)) return;
-            // 未授权媒体权限：静默不执行任何逻辑（不自动申请）
+        if (shouldUseAndroid14Callback) {
+            // DETECT_SCREEN_CAPTURE：需声明且“实际授予”。任何不满足都静默返回。
+            if (!isDeclared(declaredPerms, PERM_DETECT_SCREEN_CAPTURE)) return;
+            if (!hasPermissionGranted(currentActivity, PERM_DETECT_SCREEN_CAPTURE)) return;
+        } else {
+            // legacy：需声明媒体权限且实际授予。任何不满足都静默返回。
+            if (!isAnyDeclared(declaredPerms, Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_EXTERNAL_STORAGE)) return;
             if (!hasMediaPermission(currentActivity)) return;
         }
 
         isListening = true;
-        usingAndroid14CallbackStrategy = shouldUseAndroid14Callback;
 
         if (shouldUseAndroid14Callback) {
             startAndroid14Strategy(currentActivity.getApplication());
@@ -150,52 +128,6 @@ public class ScreenshotLifecycleObserver {
         } else {
             // Android 5.x 及以下，权限在安装时授予
             return true;
-        }
-    }
-
-    /**
-     * 请求媒体权限
-     */
-    public static void requestMediaPermission(Activity activity) {
-        if (activity == null) return;
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            // Android 5.x 及以下不需要运行时权限
-            return;
-        }
-
-        // 如果未在 Manifest 声明权限，requestPermissions 也不会生效；这里保持静默返回
-        if (!isAnyMediaPermissionDeclared(activity)) return;
-
-        String[] permissions;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions = new String[]{Manifest.permission.READ_MEDIA_IMAGES};
-        } else {
-            permissions = new String[]{Manifest.permission.READ_EXTERNAL_STORAGE};
-        }
-
-        activity.requestPermissions(permissions, 1001);
-    }
-
-    /**
-     * 处理权限请求结果（由 Unity 调用）
-     */
-    public static void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == 1001 && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            Activity currentActivity = UnityPlayer.currentActivity;
-            if (currentActivity != null) {
-                isListening = true;
-                // 权限请求只对 legacy 策略有意义；这里根据当前策略标记恢复监听
-                if (usingAndroid14CallbackStrategy && Build.VERSION.SDK_INT >= 34) {
-                    startAndroid14Strategy(currentActivity.getApplication());
-                    registerCallbackForActivity(currentActivity);
-                } else {
-                    startLegacyStrategy(currentActivity);
-                }
-            }
-        } else {
-            isListening = false;
         }
     }
 
@@ -232,7 +164,6 @@ public class ScreenshotLifecycleObserver {
             contentObserver = null;
         }
 
-        usingAndroid14CallbackStrategy = false;
         startListenTime = 0;
         screenRealSize = null;
         synchronized (processedPaths) {
@@ -300,8 +231,6 @@ public class ScreenshotLifecycleObserver {
                     }
                 } catch (Exception ignored) {
                 }
-
-                usingAndroid14CallbackStrategy = false;
                 isListening = false;
             } catch (Exception e) {
                 Log.e(TAG, "Failed to register callback for " + activity.getClass().getSimpleName(), e);
@@ -579,24 +508,31 @@ public class ScreenshotLifecycleObserver {
     // ==========================================
 
     /**
-     * 是否在 Manifest 中声明了某个权限（用于“手动添加权限”的场景兜底提示）
+     * 获取 Manifest 中声明的权限列表（requestedPermissions）
      */
-    private static boolean isPermissionDeclared(Context context, String permission) {
-        if (context == null || TextUtils.isEmpty(permission)) return false;
+    private static String[] getDeclaredPermissions(Context context) {
+        if (context == null) return null;
         try {
             PackageManager pm = context.getPackageManager();
-            if (pm == null) return false;
+            if (pm == null) return null;
             String pkg = context.getPackageName();
-            if (TextUtils.isEmpty(pkg)) return false;
-            String[] requested = pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions;
-            if (requested == null) return false;
-            for (String p : requested) {
-                if (permission.equals(p)) return true;
-            }
-            return false;
+            if (TextUtils.isEmpty(pkg)) return null;
+            return pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS).requestedPermissions;
         } catch (Exception e) {
-            return false;
+            return null;
         }
+    }
+
+    private static boolean isDeclared(String[] declaredPerms, String permission) {
+        if (declaredPerms == null || TextUtils.isEmpty(permission)) return false;
+        for (String p : declaredPerms) {
+            if (permission.equals(p)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isAnyDeclared(String[] declaredPerms, String permA, String permB) {
+        return isDeclared(declaredPerms, permA) || isDeclared(declaredPerms, permB);
     }
 
     /**
@@ -615,14 +551,8 @@ public class ScreenshotLifecycleObserver {
     }
 
     /**
-     * legacy 策略所需的媒体权限是否至少声明了一个
+     * Unity 回调
      */
-    private static boolean isAnyMediaPermissionDeclared(Context context) {
-        if (context == null) return false;
-        return isPermissionDeclared(context, Manifest.permission.READ_MEDIA_IMAGES)
-                || isPermissionDeclared(context, Manifest.permission.READ_EXTERNAL_STORAGE);
-    }
-
     private static void notifyUnity(String filePath) {
         Log.d(TAG, "notifyUnity: " + filePath);
         if (filePath == null) return;
