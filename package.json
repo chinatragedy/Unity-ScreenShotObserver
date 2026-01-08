@@ -1,0 +1,47 @@
+{
+  "name": "com.unicorn.herman.unity-screenshot-observer",
+  "version": "1.0.0",
+  "displayName": "ScreenShot Observer",
+  "description": "A standalone Unity plugin for monitoring screenshot behavior on Android and iOS platforms. Current version only monitors screenshot events. Android 13 and below can get full screenshot file paths, while Android 14+ and iOS can only monitor screenshot events. Uses singleton pattern, provides unified C# API interface, no dependencies on other SDKs.",
+  "unity": "2021.3",
+  "keywords": [
+    "screenshot",
+    "screenshot-detector",
+    "screenshot-observer",
+    "screenshot-monitor",
+    "screen-capture",
+    "observer",
+    "android",
+    "ios",
+    "mobile",
+    "plugin",
+    "unity",
+    "unity-plugin",
+    "unity-package",
+    "unity3d",
+    "csharp",
+    "native-plugin",
+    "cross-platform"
+  ],
+  "author": {
+    "name": "Herman",
+    "email": "",
+    "url": ""
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chinatragedy/Unity-ScreenShotObserver.git"
+  },
+  "dependencies": {},
+  "samples": [
+    {
+      "displayName": "Demo",
+      "description": "Simple Demo for the ScreenShotObserver",
+      "path": "Samples~/Demo"
+    }
+  ],
+  "changelogUrl": "https://github.com/chinatragedy/Unity-ScreenShotObserver/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/chinatragedy/Unity-ScreenShotObserver/blob/main/LICENSE",
+  "documentationUrl": "https://github.com/chinatragedy/Unity-ScreenShotObserver/blob/main/README.md"
+}

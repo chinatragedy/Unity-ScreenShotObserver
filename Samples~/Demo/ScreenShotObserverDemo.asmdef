@@ -1,0 +1,17 @@
+{
+    "name": "Unicorn.Herman.ScreenShotObserver.Demo",
+    "rootNamespace": "",
+    "references": [
+        "Unicorn.Herman.ScreenShotObserver"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+
